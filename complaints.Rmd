@@ -1,13 +1,16 @@
 ---
 title: "Police Complaints"
-author: "David Kane"
-date: "6/6/2021"
+author: "Stefan Arroyo-Cottier"
+date: "10/6/2021"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 library(tidyverse)
+library(ggplot2)
+library(graphics)
+library(ftplottools)
 
 # It is somewhat sloppy to include a read_csv() command in the setup chunk.
 # Normally, we would just load libraries here. However, we have not learned
@@ -15,8 +18,15 @@ library(tidyverse)
 # message go away unless we stick the call in a code chunk with a code chunk
 # option like message = FALSE or include = FALSE.
 
-raw_data <- read_csv("https://raw.githubusercontent.com/Financial-Times/police-misconduct-complaints-analysis/main/output/philly_clean.csv") %>% 
+raw_data_philly <- read_csv("https://raw.githubusercontent.com/Financial-Times/police-misconduct-complaints-analysis/main/output/philly_clean.csv") %>% 
   select(officer_id) 
+
+raw_data_nyc <- read_csv("https://raw.githubusercontent.com/Financial-Times/police-misconduct-complaints-analysis/main/output/nyc_clean.csv") %>% 
+  select(OfficerID) 
+
+raw_data_chicago <- read_csv("https://raw.githubusercontent.com/Financial-Times/police-misconduct-complaints-analysis/main/output/chicago_clean.csv") %>% 
+  select(UID) 
+
 ```
 
 
@@ -25,30 +35,37 @@ raw_data <- read_csv("https://raw.githubusercontent.com/Financial-Times/police-m
 # This code makes a table that lets us know how many times each officer id appeared 
 # in the tibble, i.e. how many complaints each officer has.
 
-clean_data <- raw_data %>% 
+clean_data_philly <- raw_data_philly %>% 
   group_by(officer_id) %>% 
   summarise(total = n()) %>% 
-  
-# We now want to know in which percentile (out of 10) each officer is, based on
-# the amount of complaints he has. We could use mutate and percentile, as we did 
-# multiple times in Wrangling B. But ntile() accomplishes the same in less code.
-  
   mutate(compl_dec = ntile(total, 10)) %>% 
-  
-# As you build a pipe, you want to look at the result after each step to make
-# sure it does what you want. Only after it is working would you then assign
-# the result to an object which you can use later. 
-  
-# We want to know the total number of complaints in each decile of officers.
-  
   group_by(compl_dec) %>% 
   summarize(compl_total = sum(total)) %>% 
-  
-# The graph needs total complaints as a percentage, which is easy to
-# calculate. Then, we only keep around the variables we need for the plot.
-  
   mutate(compl_perc = compl_total / sum(compl_total)) %>% 
-  select(compl_dec, compl_perc)
+  select(compl_dec, compl_perc) %>% 
+  mutate(city = "Philadelphia")
+
+clean_data_nyc <- raw_data_nyc %>% 
+  group_by(OfficerID) %>% 
+  summarise(total = n()) %>% 
+  mutate(compl_dec = ntile(total, 10)) %>% 
+  group_by(compl_dec) %>% 
+  summarize(compl_total = sum(total)) %>% 
+  mutate(compl_perc = compl_total / sum(compl_total)) %>% 
+  select(compl_dec, compl_perc) %>% 
+  mutate(city = "New York City")
+
+clean_data_chicago <- raw_data_chicago %>% 
+  group_by(UID) %>% 
+  summarise(total = n()) %>% 
+  mutate(compl_dec = ntile(total, 10)) %>% 
+  group_by(compl_dec) %>% 
+  summarize(compl_total = sum(total)) %>% 
+  mutate(compl_perc = compl_total / sum(compl_total)) %>% 
+  select(compl_dec, compl_perc) %>% 
+  mutate(city = "Chicago")
+
+  fresh <- bind_rows(clean_data_chicago, clean_data_philly, clean_data_nyc)
 ```
 
 ```{r, plot_data}
@@ -57,15 +74,20 @@ clean_data <- raw_data %>%
 # often easier to split your work up into separate parts, the better to make
 # sure that each part is doing what you want.
 
-clean_data %>% 
+   
+fresh %>% 
   ggplot(aes(x = compl_dec, y = compl_perc)) +
-    geom_col() +
-    labs(title = "Distribution of Police Complaints in Philadelphia",
-         subtitle = "A tenth of officers get a third of the complaints",
-         x = "Complaint Decile",
+    geom_col(fill = if_else(fresh$compl_dec == 10,"#9cc6e6","#1e4570")) +
+    facet_wrap(~city)+
+    labs(title = "In several US cities, a small group of officers generate a disproportionate \nshare of misconduct complaints",
+         subtitle = "Distribution of civilan misconduct complaints, by decile",
+         x = "Officers are ranked by number of complaints and grouped into deciles",
          y = NULL,
-         caption = "Data from Financial Times") +
+         caption = "Magic") +
     scale_x_continuous(breaks = 1:10) +
-    scale_y_continuous(labels = scales::percent_format(accuracy = 1)) 
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1))+
+    ft_theme() +
+    annotate("text", x = 5, y = .25, label = "In New York, the top 10%\nof officers who drew\ncomplaints between\n2007 and 2017 were\nresponsible for about\n32% of all complaints\nover the decade")
+    
 ```
 
